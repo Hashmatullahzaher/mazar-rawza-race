@@ -1,0 +1,33 @@
+{
+  "rules": {
+    ".read": false,
+    ".write": false,
+    "online": {
+      ".read": true,
+      "$id": {
+        ".write": true,
+        ".validate": "$id.length <= 40 && newData.hasChildren(['t']) && newData.child('t').isNumber()",
+        "t": { ".validate": true },
+        "$other": { ".validate": false }
+      }
+    },
+    "stats": {
+      ".read": true,
+      "visits": { ".write": true, ".validate": "newData.isNumber() && newData.val() === (data.exists() ? data.val() : 0) + 1" },
+      "races": { ".write": true, ".validate": "newData.isNumber() && newData.val() === (data.exists() ? data.val() : 0) + 1" },
+      "peak": {
+        ".write": true,
+        ".validate": "newData.hasChildren(['n', 't']) && newData.child('t').isNumber() && newData.child('n').val() === (data.exists() ? data.child('n').val() : 0) + 1"
+      }
+    },
+    "daily": {
+      ".read": true,
+      "$day": {
+        ".validate": "$day.matches(/^20[0-9][0-9]-[01][0-9]-[0-3][0-9]$/)",
+        "visits": { ".write": true, ".validate": "newData.isNumber() && newData.val() === (data.exists() ? data.val() : 0) + 1" },
+        "races": { ".write": true, ".validate": "newData.isNumber() && newData.val() === (data.exists() ? data.val() : 0) + 1" },
+        "$other": { ".validate": false }
+      }
+    }
+  }
+}

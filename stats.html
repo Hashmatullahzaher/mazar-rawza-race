@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>Rawza Ring - live player stats</title>
+<!-- Stats page for the live counter: added after the test by Future AI, not written by Claude Fable 5.2 -->
+<style>
+  :root { --bg: #14101c; --card: #1f1a2c; --line: rgba(255,255,255,.1); --mute: rgba(255,255,255,.6); --gold: #ffd166; --green: #3ddc84; --tq: #35c7e6; }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: #fff; font-family: "Segoe UI", system-ui, -apple-system, Roboto, sans-serif; }
+  main { max-width: 880px; margin: 0 auto; padding: 24px 16px 40px; }
+  h1 { margin: 0; font-size: 28px; } h1 em { font-style: normal; color: var(--tq); }
+  .sub { color: var(--mute); margin: 4px 0 20px; font-size: 14px; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 12px; }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 14px 16px; }
+  .k { color: var(--mute); font-size: 12px; letter-spacing: .08em; text-transform: uppercase; }
+  .v { font-size: 38px; font-weight: 800; margin-top: 4px; font-variant-numeric: tabular-nums; }
+  .v.live { color: var(--green); } .v.gold { color: var(--gold); }
+  .s { color: var(--mute); font-size: 12px; margin-top: 2px; }
+  h2 { font-size: 16px; margin: 26px 0 8px; color: var(--gold); }
+  table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
+  th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--line); font-size: 14px; }
+  th { color: var(--mute); font-size: 11px; letter-spacing: .08em; text-transform: uppercase; }
+  .bar { height: 8px; border-radius: 4px; background: linear-gradient(90deg, var(--tq), var(--green)); }
+  .note { color: var(--mute); font-size: 12.5px; line-height: 1.6; margin-top: 22px; }
+  #off { display: none; background: #3a1f24; border: 1px solid #a33; border-radius: 12px; padding: 12px 14px; margin-bottom: 16px; }
+  a { color: var(--tq); }
+</style>
+</head>
+<body>
+<main>
+  <h1>Rawza <em>Ring</em> · live stats</h1>
+  <div class="sub">Real numbers from the game's live database. Days are Kabul days. <a href="./">Play the game</a></div>
+  <div id="off">The live counter is not connected yet (no Firebase project in js/live-config.js).</div>
+  <div class="grid">
+    <div class="card"><div class="k">Online now</div><div class="v live" id="now">–</div><div class="s">open games right now</div></div>
+    <div class="card"><div class="k">Peak online</div><div class="v gold" id="peak">–</div><div class="s" id="peakT">&nbsp;</div></div>
+    <div class="card"><div class="k">Today: visits / races</div><div class="v" id="today">–</div><div class="s" id="todayD">&nbsp;</div></div>
+    <div class="card"><div class="k">All time: visits / races</div><div class="v" id="all">–</div><div class="s" id="since">&nbsp;</div></div>
+  </div>
+  <h2>Last 14 days</h2>
+  <table><thead><tr><th>Day (Kabul)</th><th>Visits</th><th>Races</th><th style="width:40%"></th></tr></thead><tbody id="days"></tbody></table>
+  <p class="note">How these are counted: every open copy of the game is one player online, and it drops off by itself when the game is closed or loses its connection (usually within a minute). A visit is one opening of the game page; a race is one tap on START RACE or RACE AGAIN. No names, emails or locations are stored.</p>
+</main>
+<script type="module">
+  import { FIREBASE_CONFIG } from './js/live-config.js';
+  import { kabulDay } from './js/live.js';
+  const SDK = 'https://www.gstatic.com/firebasejs/11.0.2/';
+  const $ = (id) => document.getElementById(id);
+  const fmt = (n) => (n || 0).toLocaleString('en');
+  if (!FIREBASE_CONFIG) { $('off').style.display = 'block'; }
+  else {
+    const { initializeApp } = await import(SDK + 'firebase-app.js');
+    const { getDatabase, ref, onValue, connectDatabaseEmulator } = await import(SDK + 'firebase-database.js');
+    const db = getDatabase(initializeApp(FIREBASE_CONFIG, 'stats'));
+    if (FIREBASE_CONFIG.emulator) { const [h, p] = FIREBASE_CONFIG.emulator.split(':'); connectDatabaseEmulator(db, h, +p); }
+    onValue(ref(db, 'online'), (s) => { $('now').textContent = fmt(s.size); });
+    onValue(ref(db, 'stats'), (s) => {
+      const v = s.val() || {};
+      $('all').textContent = fmt(v.visits) + ' / ' + fmt(v.races);
+      if (v.peak) { $('peak').textContent = fmt(v.peak.n); $('peakT').textContent = new Date(v.peak.t).toLocaleString('en-GB', { timeZone: 'Asia/Kabul', dateStyle: 'medium', timeStyle: 'short' }) + ' Kabul'; }
+    });
+    onValue(ref(db, 'daily'), (s) => {
+      const d = s.val() || {};
+      const today = kabulDay();
+      const t = d[today] || {};
+      $('today').textContent = fmt(t.visits) + ' / ' + fmt(t.races);
+      $('todayD').textContent = today;
+      const keys = Object.keys(d).sort();
+      if (keys.length) $('since').textContent = 'since ' + keys[0];
+      const days = [];
+      for (let i = 13; i >= 0; i--) days.push(kabulDay(new Date(Date.now() - i * 86400000)));
+      const max = Math.max(1, ...days.map((k) => (d[k] && d[k].visits) || 0));
+      $('days').innerHTML = days.reverse().map((k) => { const r = d[k] || {};
+        return `<tr><td>${k}</td><td>${fmt(r.visits)}</td><td>${fmt(r.races)}</td><td><div class="bar" style="width:${(100 * (r.visits || 0) / max).toFixed(1)}%"></div></td></tr>`; }).join('');
+    });
+  }
+</script>
+</body>
+</html>
