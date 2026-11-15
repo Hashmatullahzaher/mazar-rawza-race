@@ -1,5 +1,5 @@
 /*
- * Touch controls for phones and tablets (v2: fingers tracked at document level).
+ * Touch controls for phones and tablets (v4: fingers tracked at document level, full screen).
  * ADDED AFTER THE TEST by Future AI (Hashmatullah Zaher), 15 Nov 2026. NOT written by Claude Fable 5.2.
  * Fable's game code is unchanged: this file only turns taps into the same key presses the game already reads
  * (arrows, Space, C, R, P), and makes the HUD smaller on touch screens. Desktop players never see it.
@@ -30,7 +30,10 @@
   #tBrake { right: calc(env(safe-area-inset-right) + 136px); bottom: 24px; width: 76px; height: 76px; background: rgba(200,40,30,.45); }
   #tDrift { right: calc(env(safe-area-inset-right) + 136px); bottom: 112px; width: 66px; height: 66px; border-radius: 18px; }
   .tsm { width: 46px; height: 46px; font-size: 20px; top: calc(env(safe-area-inset-top) + 10px); border-radius: 14px; }
-  #tCam { left: calc(50% - 80px); } #tReset { left: calc(50% - 23px); } #tPause { left: calc(50% + 34px); }
+  #tCam { left: calc(50% - 103px); } #tReset { left: calc(50% - 46px); } #tPause { left: calc(50% + 11px); } #tFull { left: calc(50% + 68px); }
+  #tToast { position: fixed; left: 50%; top: 30%; transform: translateX(-50%); z-index: 40; display: none; max-width: 86vw; padding: 12px 18px;
+            border-radius: 14px; background: rgba(16,20,32,.92); color: #fff; text-align: center; font: 700 15px "Segoe UI", Vazirmatn, Tahoma, sans-serif; line-height: 1.6; }
+  #tToast.show { display: block; }
   @media (min-width: 901px) { .tsm { top: calc(env(safe-area-inset-top) + 104px); } }
   #tRotate { position: fixed; left: 50%; top: 42%; transform: translateX(-50%); z-index: 31; pointer-events: none; display: none;
              padding: 10px 16px; border-radius: 12px; background: rgba(16,20,32,.82); color: #fff; text-align: center;
@@ -74,6 +77,32 @@
   const hold = (id, code, label) => HOLD.push({ b: mk(id, label, 'tb'), code });
   const tap = (id, code, label, cls) => TAP.push({ b: mk(id, label, 'tb tsm' + (cls ? ' ' + cls : '')), code });
 
+  // ---- full screen (Android and most browsers; iPhone Safari does not allow it, so there we explain Add to Home Screen)
+  const root = document.documentElement;
+  const fsEl = () => document.fullscreenElement || document.webkitFullscreenElement;
+  const canFS = !!(root.requestFullscreen || root.webkitRequestFullscreen);
+  const asApp = () => window.matchMedia('(display-mode: fullscreen), (display-mode: standalone)').matches || navigator.standalone === true;
+  const isIOS = /iP(hone|od|ad)/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+  const toast = document.createElement('div'); toast.id = 'tToast'; document.body.appendChild(toast);
+  let toastT = 0;
+  function say(html, ms) { toast.innerHTML = html; toast.classList.add('show'); clearTimeout(toastT); toastT = setTimeout(() => toast.classList.remove('show'), ms || 6000); }
+  const IOS_TIP = 'iPhone: tap <b>Share &#11014;</b> then <b>Add to Home Screen</b>.<br>Open the game from the new icon: it plays full screen.'
+    + '<br><span dir="rtl">آیفون: دکمهٔ Share را بزنید، بعد Add to Home Screen. بازی را از آیکون تازه باز کنید تا تمام‌صفحه شود.</span>';
+  function goFull() {
+    if (asApp() || fsEl() || !canFS) return;
+    try {
+      const r = root.requestFullscreen ? root.requestFullscreen({ navigationUI: 'hide' }) : root.webkitRequestFullscreen();
+      Promise.resolve(r).then(() => { try { if (screen.orientation && screen.orientation.lock) screen.orientation.lock('landscape').catch(() => {}); } catch (_) {} }).catch(() => {});
+    } catch (_) {}
+  }
+  function toggleFull() {
+    if (fsEl()) { (document.exitFullscreen || document.webkitExitFullscreen).call(document); return; }
+    if (asApp()) return;
+    if (canFS) goFull(); else say(isIOS ? IOS_TIP : 'Full screen is not available in this browser. Try Chrome.', 8000);
+  }
+  // START RACE and RACE AGAIN switch to full screen by themselves (a tap counts as the user's permission)
+  for (const id of ['startBtn', 'restartBtn']) { const b = document.getElementById(id); if (b) b.addEventListener('click', goFull); }
+
   hold('tLeft', 'ArrowLeft', '&#9664;');
   hold('tRight', 'ArrowRight', '&#9654;');
   hold('tGas', 'ArrowUp', '<div style="text-align:center;line-height:1">&#9650;<br><small>GAS</small></div>');
@@ -82,6 +111,7 @@
   tap('tCam', 'KeyC', '&#128247;');
   tap('tReset', 'KeyR', '&#8634;');
   tap('tPause', 'KeyP', '&#10074;&#10074;', 'always');
+  tap('tFull', toggleFull, '&#9974;');
 
   const rot = document.createElement('div');
   rot.id = 'tRotate';
@@ -90,7 +120,7 @@
   const pauseText = document.querySelector('#pause p');
   if (pauseText) pauseText.innerHTML += '<br>Tap anywhere to continue.';
   const attrib = document.getElementById('attrib');
-  if (attrib) attrib.textContent += ' · touch v3';
+  if (attrib) attrib.textContent += ' · touch v4';
 
   const PAD = 16;
   const shown = (b) => { const r = b.getBoundingClientRect(); return r.width > 0 && r.height > 0; };
@@ -122,11 +152,13 @@
     held.clear();
     want.forEach((c) => held.add(c));
   }
+  let pendingFn = null;
+  const runPending = () => { if (pendingFn) { const f = pendingFn; pendingFn = null; f(); } };
   function tapAt(x, y) {
     for (const t of TAP) {
       if (!shown(t.b) || !hit(t.b, x, y)) continue;
       t.b.classList.add('on'); setTimeout(() => t.b.classList.remove('on'), 160);
-      send('keydown', t.code); send('keyup', t.code);
+      if (typeof t.code === 'function') pendingFn = t.code; else { send('keydown', t.code); send('keyup', t.code); }
       return true;
     }
     return false;
@@ -146,13 +178,13 @@
   if ('ontouchstart' in window) {
     document.addEventListener('touchstart', (e) => { for (const t of e.changedTouches) start(t.identifier, t.clientX, t.clientY, e); }, opt);
     document.addEventListener('touchmove', (e) => { for (const t of e.changedTouches) move(t.identifier, t.clientX, t.clientY); if (racing()) e.preventDefault(); update(); }, opt);
-    const fin = (e) => { for (const t of e.changedTouches) end(t.identifier); if (racing()) e.preventDefault(); update(); };
+    const fin = (e) => { for (const t of e.changedTouches) end(t.identifier); if (racing()) e.preventDefault(); update(); if (e.type === 'touchend') runPending(); else pendingFn = null; };
     document.addEventListener('touchend', fin, opt);
     document.addEventListener('touchcancel', fin, opt);
   } else {
     document.addEventListener('pointerdown', (e) => { if (e.pointerType !== 'mouse') start(e.pointerId, e.clientX, e.clientY, e); }, opt);
     document.addEventListener('pointermove', (e) => { if (e.pointerType !== 'mouse') { move(e.pointerId, e.clientX, e.clientY); update(); } }, opt);
-    const fin = (e) => { end(e.pointerId); update(); };
+    const fin = (e) => { end(e.pointerId); update(); if (e.type === 'pointerup') runPending(); else pendingFn = null; };
     document.addEventListener('pointerup', fin, opt);
     document.addEventListener('pointercancel', fin, opt);
   }
@@ -165,7 +197,8 @@
   if (keysBox) {
     const p = document.createElement('p');
     p.className = 'touchnote';
-    p.innerHTML = 'On a phone: &#9664; &#9654; steer &middot; GAS &middot; BRAKE &middot; DRIFT &middot; &#128247; camera &middot; &#8634; reset<br>Best played with the phone sideways.';
+    p.innerHTML = 'On a phone: &#9664; &#9654; steer &middot; GAS &middot; BRAKE &middot; DRIFT &middot; &#128247; camera &middot; &#8634; reset &middot; &#9974; full screen<br>Best played with the phone sideways.'
+      + (isIOS && !asApp() ? '<br><span style="font-weight:600;color:#fff">iPhone full screen: Share &#11014; &rarr; Add to Home Screen, then open the new icon.</span>' : '');
     keysBox.after(p);
     keysBox.style.display = 'none';
   }
@@ -175,6 +208,8 @@
     const on = racing();
     tc.classList.toggle('off', !on);
     document.getElementById('tPause').style.display = on || vis('pause') ? '' : 'none';
+    document.getElementById('tFull').style.display = asApp() ? 'none' : '';
+    document.getElementById('tFull').innerHTML = fsEl() ? '&#10005;' : '&#9974;';
     document.body.classList.toggle('racing', on);
     if (!on && held.size) releaseAll();
   }, 200);

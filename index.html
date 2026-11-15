@@ -2,7 +2,15 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<!-- Home-screen app mode (full screen on phones): added after the test by Future AI, not written by Claude Fable 5.2 -->
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Rawza Ring">
+<link rel="apple-touch-icon" href="icons/icon-180.png">
+<meta name="theme-color" content="#1a1420">
 <title>Rawza Ring - street race around the Blue Mosque, Mazar-i-Sharif</title>
 <style>
   :root { --tq: #35c7e6; --gold: #ffd166; --ink: rgba(16, 20, 32, 0.78); }
@@ -141,6 +149,6 @@
 
 <script type="module" src="js/main.js"></script>
 <!-- Touch controls: added after the test by Future AI, not written by Claude Fable 5.2 -->
-<script src="js/touch.js?v=3" defer></script>
+<script src="js/touch.js?v=4" defer></script>
 </body>
 </html>
