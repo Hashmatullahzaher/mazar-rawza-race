@@ -16,6 +16,7 @@ Built by **Claude Fable 5.2** from a single prompt, in about 40 minutes, during 
 - Full screen on phones: START RACE switches to full screen and a full-screen button sits in the race screen (Android and most browsers).
 - Always landscape on phones: when a phone is held upright, the game is drawn turned sideways (and Android locks landscape in full screen), so it always plays in landscape.
 - Live player counter (real numbers only): `js/live.js`, `js/live-config.js`, `stats.html` and `database.rules.json`. Every open game counts as one player online and drops off when it is closed; visits and races are counted per Kabul day. Nothing personal is stored. Switched off until a Firebase project is set in `js/live-config.js`.
+- Roadside billboards: `js/billboards.js` and `media/`. Eight big screens beside the race loop (mostly at the turns) with short silent clips from the Dari video about this test, the creator's social accounts, the YouTube channel and the free WhatsApp community. Click or tap a board to open its link.
 - Home-screen app mode: `manifest.webmanifest`, `icons/` and a few tags in the `<head>` of `index.html`, so the game opens full screen when added to the home screen (the only way on iPhone).
 
 - Dari video: https://youtu.be/B9HkGEtEdtA

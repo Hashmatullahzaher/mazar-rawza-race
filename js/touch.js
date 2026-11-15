@@ -148,7 +148,7 @@
   const pauseText = document.querySelector('#pause p');
   if (pauseText) pauseText.innerHTML += '<br>Tap anywhere to continue.';
   const attrib = document.getElementById('attrib');
-  if (attrib) attrib.textContent += ' · touch v5';
+  if (attrib) attrib.textContent += ' · touch v6';
 
   const PAD = 16;
   const shown = (b) => { const r = b.getBoundingClientRect(); return r.width > 0 && r.height > 0; };
@@ -197,10 +197,18 @@
     if (!racing()) return;                                  // menus: let the START / RACE AGAIN buttons get their click
     e.preventDefault();
     fingers.set(id, { x, y });
+    taps.set(id, { x, y, t: Date.now() });
     update();
   }
+  // a short tap away from the driving buttons is passed to the billboards (js/billboards.js), which open their link
+  const taps = new Map();
+  const nearControl = (x, y) => HOLD.concat(TAP).some((o) => shown(o.b) && hit(o.b, x, y));
   function move(id, x, y) { if (fingers.has(id)) fingers.set(id, { x, y }); }
-  function end(id) { fingers.delete(id); }
+  function end(id) {
+    const f = fingers.get(id), t = taps.get(id);
+    fingers.delete(id); taps.delete(id);
+    if (f && t && Date.now() - t.t < 450 && Math.hypot(f.x - t.x, f.y - t.y) < 14 && !nearControl(t.x, t.y) && window.__billboardTap) window.__billboardTap(t.x, t.y);
+  }
 
   const opt = { passive: false };
   if ('ontouchstart' in window) {
