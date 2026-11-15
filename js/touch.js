@@ -1,5 +1,5 @@
 /*
- * Touch controls for phones and tablets.
+ * Touch controls for phones and tablets (v2: fingers tracked at document level).
  * ADDED AFTER THE TEST by Future AI (Hashmatullah Zaher), 15 Nov 2026. NOT written by Claude Fable 5.2.
  * Fable's game code is unchanged: this file only turns taps into the same key presses the game already reads
  * (arrows, Space, C, R, P), and makes the HUD smaller on touch screens. Desktop players never see it.
@@ -54,38 +54,25 @@
   document.body.classList.add('touch');
 
   const send = (type, code) => window.dispatchEvent(new KeyboardEvent(type, { code, key: code, bubbles: true }));
+  const vis = (id) => { const el = document.getElementById(id); return !!el && !el.classList.contains('hidden'); };
 
   const tc = document.createElement('div');
   tc.id = 'tc';
   tc.className = 'off';
   document.body.appendChild(tc);
 
-  // hold buttons: key down while the finger is on the button
-  function hold(id, code, label, cls) {
+  // v2: the buttons are only pictures. Every finger on the screen is tracked at document level and checked against
+  // the button areas (with a margin), so a thumb that lands near a button or slides from one button to another still works.
+  const HOLD = [], TAP = [];
+  function mk(id, label, cls) {
     const b = document.createElement('div');
-    b.id = id; b.className = 'tb' + (cls ? ' ' + cls : ''); b.innerHTML = label;
-    let down = false;
-    const on = (e) => { e.preventDefault(); if (down) return; down = true; b.classList.add('on'); send('keydown', code); if (navigator.vibrate) navigator.vibrate(8); try { b.setPointerCapture(e.pointerId); } catch (_) {} };
-    const off = (e) => { e.preventDefault(); if (!down) return; down = false; b.classList.remove('on'); send('keyup', code); };
-    b.addEventListener('pointerdown', on);
-    b.addEventListener('pointerup', off);
-    b.addEventListener('pointercancel', off);
-    b.addEventListener('lostpointercapture', off);
+    b.id = id; b.className = cls; b.innerHTML = label;
     b.addEventListener('contextmenu', (e) => e.preventDefault());
     tc.appendChild(b);
     return b;
   }
-  // tap buttons: one key press
-  function tap(id, code, label, cls) {
-    const b = document.createElement('div');
-    b.id = id; b.className = 'tb tsm' + (cls ? ' ' + cls : ''); b.innerHTML = label;
-    b.addEventListener('pointerdown', (e) => { e.preventDefault(); b.classList.add('on'); send('keydown', code); });
-    const up = (e) => { e.preventDefault(); b.classList.remove('on'); send('keyup', code); };
-    b.addEventListener('pointerup', up);
-    b.addEventListener('pointercancel', up);
-    tc.appendChild(b);
-    return b;
-  }
+  const hold = (id, code, label) => HOLD.push({ b: mk(id, label, 'tb'), code });
+  const tap = (id, code, label, cls) => TAP.push({ b: mk(id, label, 'tb tsm' + (cls ? ' ' + cls : '')), code });
 
   hold('tLeft', 'ArrowLeft', '&#9664;');
   hold('tRight', 'ArrowRight', '&#9654;');
@@ -100,12 +87,78 @@
   rot.id = 'tRotate';
   rot.innerHTML = '&#128241;&#8635; Turn your phone sideways<br><span dir="rtl">مبایل را افقی بگیرید</span>';
   document.body.appendChild(rot);
-
-  // a tap on the pause screen continues the race
-  const pause = document.getElementById('pause');
-  if (pause) pause.addEventListener('pointerdown', (e) => { e.preventDefault(); send('keydown', 'KeyP'); send('keyup', 'KeyP'); });
-  const pauseText = pause && pause.querySelector('p');
+  const pauseText = document.querySelector('#pause p');
   if (pauseText) pauseText.innerHTML += '<br>Tap anywhere to continue.';
+  const attrib = document.getElementById('attrib');
+  if (attrib) attrib.textContent += ' · touch v3';
+
+  const PAD = 16;
+  const shown = (b) => { const r = b.getBoundingClientRect(); return r.width > 0 && r.height > 0; };
+  const hit = (b, x, y) => { const r = b.getBoundingClientRect(); return r.width > 0 && x >= r.left - PAD && x <= r.right + PAD && y >= r.top - PAD && y <= r.bottom + PAD; };
+  const racing = () => vis('hud') && !vis('menu') && !vis('finish') && !vis('pause');
+
+  const fingers = new Map();   // touch id -> {x, y}
+  const held = new Set();      // key codes we are holding down now
+  function update() {
+    const want = new Set();
+    if (racing()) for (const f of fingers.values()) {
+      // each finger presses one button: the one it is on, or the nearest within the margin
+      let best = null, bestD = PAD + 1;
+      for (const h of HOLD) {
+        if (!shown(h.b)) continue;
+        const r = h.b.getBoundingClientRect();
+        const dx = Math.max(r.left - f.x, 0, f.x - r.right), dy = Math.max(r.top - f.y, 0, f.y - r.bottom);
+        const d = Math.hypot(dx, dy);
+        if (d < bestD) { bestD = d; best = h; }
+      }
+      if (best) want.add(best.code);
+    }
+    for (const h of HOLD) {
+      const on = want.has(h.code);
+      if (on && !held.has(h.code)) { send('keydown', h.code); try { if (navigator.vibrate) navigator.vibrate(8); } catch (_) {} }
+      if (!on && held.has(h.code)) send('keyup', h.code);
+      h.b.classList.toggle('on', on);
+    }
+    held.clear();
+    want.forEach((c) => held.add(c));
+  }
+  function tapAt(x, y) {
+    for (const t of TAP) {
+      if (!shown(t.b) || !hit(t.b, x, y)) continue;
+      t.b.classList.add('on'); setTimeout(() => t.b.classList.remove('on'), 160);
+      send('keydown', t.code); send('keyup', t.code);
+      return true;
+    }
+    return false;
+  }
+  function start(id, x, y, e) {
+    if (tapAt(x, y)) { e.preventDefault(); return; }
+    if (vis('pause')) { send('keydown', 'KeyP'); send('keyup', 'KeyP'); e.preventDefault(); return; }   // tap the pause card to continue
+    if (!racing()) return;                                  // menus: let the START / RACE AGAIN buttons get their click
+    e.preventDefault();
+    fingers.set(id, { x, y });
+    update();
+  }
+  function move(id, x, y) { if (fingers.has(id)) fingers.set(id, { x, y }); }
+  function end(id) { fingers.delete(id); }
+
+  const opt = { passive: false };
+  if ('ontouchstart' in window) {
+    document.addEventListener('touchstart', (e) => { for (const t of e.changedTouches) start(t.identifier, t.clientX, t.clientY, e); }, opt);
+    document.addEventListener('touchmove', (e) => { for (const t of e.changedTouches) move(t.identifier, t.clientX, t.clientY); if (racing()) e.preventDefault(); update(); }, opt);
+    const fin = (e) => { for (const t of e.changedTouches) end(t.identifier); if (racing()) e.preventDefault(); update(); };
+    document.addEventListener('touchend', fin, opt);
+    document.addEventListener('touchcancel', fin, opt);
+  } else {
+    document.addEventListener('pointerdown', (e) => { if (e.pointerType !== 'mouse') start(e.pointerId, e.clientX, e.clientY, e); }, opt);
+    document.addEventListener('pointermove', (e) => { if (e.pointerType !== 'mouse') { move(e.pointerId, e.clientX, e.clientY); update(); } }, opt);
+    const fin = (e) => { end(e.pointerId); update(); };
+    document.addEventListener('pointerup', fin, opt);
+    document.addEventListener('pointercancel', fin, opt);
+  }
+  const releaseAll = () => { fingers.clear(); update(); };
+  window.addEventListener('blur', releaseAll);
+  document.addEventListener('visibilitychange', releaseAll);
 
   // title screen: say how to play by touch
   const keysBox = document.querySelector('#menu .keys');
@@ -118,11 +171,11 @@
   }
 
   // show the driving buttons only while a race is on screen (not over the menu, finish or pause cards)
-  const vis = (id) => { const el = document.getElementById(id); return el && !el.classList.contains('hidden'); };
   setInterval(() => {
-    const racing = vis('hud') && !vis('menu') && !vis('finish') && !vis('pause');
-    tc.classList.toggle('off', !racing);
-    document.getElementById('tPause').style.display = racing || vis('pause') ? '' : 'none';
-    document.body.classList.toggle('racing', racing);
+    const on = racing();
+    tc.classList.toggle('off', !on);
+    document.getElementById('tPause').style.display = on || vis('pause') ? '' : 'none';
+    document.body.classList.toggle('racing', on);
+    if (!on && held.size) releaseAll();
   }, 200);
 })();
