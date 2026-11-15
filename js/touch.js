@@ -1,5 +1,5 @@
 /*
- * Touch controls for phones and tablets (v4: fingers tracked at document level, full screen).
+ * Touch controls for phones and tablets (v5: fingers tracked at document level, full screen, always landscape).
  * ADDED AFTER THE TEST by Future AI (Hashmatullah Zaher), 15 Nov 2026. NOT written by Claude Fable 5.2.
  * Fable's game code is unchanged: this file only turns taps into the same key presses the game already reads
  * (arrows, Space, C, R, P), and makes the HUD smaller on touch screens. Desktop players never see it.
@@ -39,22 +39,54 @@
              padding: 10px 16px; border-radius: 12px; background: rgba(16,20,32,.82); color: #fff; text-align: center;
              font: 700 15px "Segoe UI", Vazirmatn, Tahoma, sans-serif; line-height: 1.5; }
   .touchnote { color: #ffd166 !important; font-weight: 700; }
-  @media (orientation: portrait) {
-    body.touch.racing #tRotate { display: block; animation: tfade .6s 5s forwards; }
-    body.touch #speedo { bottom: 120px; }
-    #tLeft, #tRight { width: 72px; height: 72px; bottom: 26px; }
-    #tRight { left: calc(env(safe-area-inset-left) + 100px); }
-    #tGas { width: 88px; height: 88px; bottom: 26px; }
-    #tBrake { width: 66px; height: 66px; right: calc(env(safe-area-inset-right) + 116px); bottom: 20px; }
-    #tDrift { width: 60px; height: 60px; right: calc(env(safe-area-inset-right) + 32px); bottom: 128px; }
-    .tsm { top: calc(env(safe-area-inset-top) + 196px); }
-  }
-  @keyframes tfade { to { opacity: 0; visibility: hidden; } }
+  /* phones: the start, finish and pause cards must fit a short landscape screen */
+  body.touch .overlay .card { max-height: calc(100% - 16px); overflow-y: auto; padding: 14px 22px; width: min(640px, 94%); }
+  body.touch .card h1 { font-size: 30px; }
+  body.touch .card .fa { font-size: 17px; }
+  body.touch .card p { font-size: 12.5px; line-height: 1.45; margin: 7px 0; }
+  body.touch button.go { padding: 10px 34px; font-size: 17px; }
+  body.touch #status { margin-top: 6px; font-size: 11px; }
+  body.touch table { margin: 8px 0 10px; } body.touch td { padding: 5px 8px; font-size: 13px; }
   `;
   const st = document.createElement('style');
   st.textContent = css;
   document.head.appendChild(st);
   document.body.classList.add('touch');
+
+  // ---- always landscape: when the phone is held upright, the whole page is drawn turned 90 degrees, so the
+  // player turns the phone and gets a normal landscape game. (Android in full screen also locks the screen to landscape.)
+  // The game reads its size from window.innerWidth / innerHeight, so those report the landscape size while turned.
+  // keep the browser's own size readers (captured once, before we replace them below)
+  const own = (k) => Object.getOwnPropertyDescriptor(window, k) || Object.getOwnPropertyDescriptor(Window.prototype, k);
+  const dW = own('innerWidth'), dH = own('innerHeight');
+  const rawW = () => (dW && dW.get) ? dW.get.call(window) : document.documentElement.clientWidth;
+  const realH = () => (dH && dH.get) ? dH.get.call(window) : document.documentElement.clientHeight;
+  const upright = () => rawW() < realH();
+  try {
+    Object.defineProperty(window, 'innerWidth', { configurable: true, get: () => upright() ? realH() : rawW() });
+    Object.defineProperty(window, 'innerHeight', { configurable: true, get: () => upright() ? rawW() : realH() });
+  } catch (_) {}
+  const body = document.body;
+  let turned = null;
+  function applyTurn(force) {
+    const t = upright();
+    if (t === turned && !force) return;
+    turned = t;
+    body.classList.toggle('rot', t);
+    if (t) {
+      const W = rawW(), H = realH();
+      Object.assign(body.style, { position: 'fixed', top: '0', left: '0', width: H + 'px', height: W + 'px',
+        transformOrigin: 'top left', transform: 'rotate(90deg) translateY(-100%)', overflow: 'hidden' });
+    } else {
+      for (const k of ['position', 'top', 'left', 'width', 'height', 'transformOrigin', 'transform', 'overflow']) body.style[k] = '';
+    }
+    window.dispatchEvent(new Event('resize'));   // let the game re-measure the screen
+  }
+  let lastWH = '';
+  const watch = () => { const k = rawW() + 'x' + realH(); if (k !== lastWH) { lastWH = k; applyTurn(true); } };
+  window.addEventListener('orientationchange', () => setTimeout(watch, 250));
+  setInterval(watch, 300);
+  watch();
 
   const send = (type, code) => window.dispatchEvent(new KeyboardEvent(type, { code, key: code, bubbles: true }));
   const vis = (id) => { const el = document.getElementById(id); return !!el && !el.classList.contains('hidden'); };
@@ -113,14 +145,10 @@
   tap('tPause', 'KeyP', '&#10074;&#10074;', 'always');
   tap('tFull', toggleFull, '&#9974;');
 
-  const rot = document.createElement('div');
-  rot.id = 'tRotate';
-  rot.innerHTML = '&#128241;&#8635; Turn your phone sideways<br><span dir="rtl">مبایل را افقی بگیرید</span>';
-  document.body.appendChild(rot);
   const pauseText = document.querySelector('#pause p');
   if (pauseText) pauseText.innerHTML += '<br>Tap anywhere to continue.';
   const attrib = document.getElementById('attrib');
-  if (attrib) attrib.textContent += ' · touch v4';
+  if (attrib) attrib.textContent += ' · touch v5';
 
   const PAD = 16;
   const shown = (b) => { const r = b.getBoundingClientRect(); return r.width > 0 && r.height > 0; };
@@ -197,7 +225,7 @@
   if (keysBox) {
     const p = document.createElement('p');
     p.className = 'touchnote';
-    p.innerHTML = 'On a phone: &#9664; &#9654; steer &middot; GAS &middot; BRAKE &middot; DRIFT &middot; &#128247; camera &middot; &#8634; reset &middot; &#9974; full screen<br>Best played with the phone sideways.'
+    p.innerHTML = 'On a phone: &#9664; &#9654; steer &middot; GAS &middot; BRAKE &middot; DRIFT &middot; &#128247; camera &middot; &#8634; reset &middot; &#9974; full screen<br>The game always plays sideways: turn your phone.'
       + (isIOS && !asApp() ? '<br><span style="font-weight:600;color:#fff">iPhone full screen: Share &#11014; &rarr; Add to Home Screen, then open the new icon.</span>' : '');
     keysBox.after(p);
     keysBox.style.display = 'none';

@@ -14,6 +14,7 @@ Built by **Claude Fable 5.2** from a single prompt, in about 40 minutes, during 
 **Additions after the test** (by Future AI on 15 Nov 2026, not written by Fable and not part of the test):
 - Phone touch controls: `js/touch.js` and the one line in `index.html` that loads it. They only turn taps into the same key presses the game already reads.
 - Full screen on phones: START RACE switches to full screen and a full-screen button sits in the race screen (Android and most browsers).
+- Always landscape on phones: when a phone is held upright, the game is drawn turned sideways (and Android locks landscape in full screen), so it always plays in landscape.
 - Home-screen app mode: `manifest.webmanifest`, `icons/` and a few tags in the `<head>` of `index.html`, so the game opens full screen when added to the home screen (the only way on iPhone).
 
 - Dari video: https://youtu.be/B9HkGEtEdtA
